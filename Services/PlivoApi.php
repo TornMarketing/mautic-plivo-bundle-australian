@@ -125,7 +125,7 @@ class PlivoApi extends AbstractSmsApi
     private function sanitizeNumber($number)
     {
         $util = PhoneNumberUtil::getInstance();
-        $parsed = $util->parse($number, 'US');
+        $parsed = $util->parse($number, 'AU');
 
         return $util->format($parsed, PhoneNumberFormat::E164);
     }
