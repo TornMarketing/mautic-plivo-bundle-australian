@@ -11,7 +11,7 @@
 
 return [
     'name'        => 'Plivo',
-    'description' => 'Plivo Sms integration',
+    'description' => 'Plivo Sms integration (australian tweak)',
     'author'      => 'mtcextendee.com',
     'version'     => '1.0.0',
     'services' => [
