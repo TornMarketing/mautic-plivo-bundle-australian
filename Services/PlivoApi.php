@@ -19,8 +19,10 @@ use Mautic\PluginBundle\Helper\IntegrationHelper;
 use Mautic\SmsBundle\Api\AbstractSmsApi;
 use Monolog\Logger;
 use GuzzleHttp\Client;
+use Plivo\Exceptions\PlivoRestException;
+use Plivo\RestClient;
 
-class MtalkzTransport extends AbstractSmsApi
+class PlivoApi extends AbstractSmsApi
 {
     /**
      * @var Logger
@@ -53,83 +55,73 @@ class MtalkzTransport extends AbstractSmsApi
     protected $connected;
 
     /**
+     * @var string
+     */
+    protected $originator;
+    
+     /**
+     * @var Http
+     */
+    private $http;
+    
+    /**
      * @param IntegrationHelper $integrationHelper
      * @param Logger            $logger
      * @param Client            $client
      */
-    public function __construct(IntegrationHelper $integrationHelper, Logger $logger, Client $client)
+    public function __construct(TrackableModel $pageTrackableModel, PhoneNumberHelper $phoneNumberHelper, IntegrationHelper $integrationHelper, Logger $logger, Http $http)
     {
-        $this->integrationHelper = $integrationHelper;
         $this->logger = $logger;
-        $this->client = $client;
+        $this->integrationHelper = $integrationHelper;
+        $this->http = $http;
+        $this->client = $http;
         $this->connected = false;
+        parent::__construct($pageTrackableModel);
+
     }
 
-    /**
-     * @param Lead   $contact
-     * @param string $content
-     *
-     * @return bool|string
-     */
+
+
     public function sendSms(Lead $contact, $content)
     {
         $number = $contact->getLeadPhoneNumber();
         if (empty($number)) {
             return false;
         }
-
-        try {
-            $number = substr($this->sanitizeNumber($number), 1);
-        } catch (NumberParseException $e) {
-            $this->logger->addInfo('Invalid number format. ', ['exception' => $e]);
-            return $e->getMessage();
-        }
-        
-        try {
-            if (!$this->connected && !$this->configureConnection()) {
-                throw new \Exception("Mtalkz SMS is not configured properly.");
+     try {
+        $integration = $this->integrationHelper->getIntegrationObject('Plivo');
+        if ($integration && $integration->getIntegrationSettings()->getIsPublished()) {
+            $data   = $integration->getDecryptedApiKeys();
+            $client = new RestClient($data['AUTH_ID'], $data['AUTH_TOKEN']);
+            
+            try {
+                $number = $this->sanitizeNumber($contact->getLeadPhoneNumber());
+            } catch (NumberParseException $exception) {
+                return $exception->getMessage();
             }
-            if (empty($content)) {
-                throw new \Exception('Message content is Empty.');
+            
+            try {
+                $response = $client->messages->create(
+                    $data['sender_phone_number'],
+                    [$number],
+                    $content
+                );
+
+                return true;
+            } catch (PlivoRestException $ex) {
+                if (method_exists($ex, 'getErrorMessage')) {
+                    return $ex->getErrorMessage();
+                } elseif (!empty($ex->getMessage())) {
+                    return $ex->getMessage();
+                }
+
+                return false;
             }
-
-            $response = $this->send($number, $content);
-            $this->logger->addInfo("Mtalkz SMS request succeeded. ", ['response' => $response]);
-            return true;
-        } catch (\Exception $e) {
-            $this->logger->addError("Mtalkz SMS request failed. ", ['exception' => $e]);
-            return $e->getMessage();
         }
+     }
     }
+    
 
-    /**
-     * @param integer   $number
-     * @param string    $content
-     * 
-     * @return array
-     * 
-     * @throws \Exception
-     */
-    protected function send($number, $content)
-    {
-        $params = array(
-            'apikey' => $this->api_key,
-            'senderid' => $this->sender_id,
-            'number' => $number,
-            'message' => $content,
-            'format' => 'json',
-        );
-        $url = 'https://msgn.mtalkz.com/api' . http_build_query($params);
-        $headers = ['Accept' => 'application/json'];
-
-        $this->logger->addInfo("Mtalkz SMS API request intiated. ", ['url' => $url]);
-
-        $response = $this->client->get($url, [
-            'headers' => $headers,            
-        ]);
-
-        return $response->getBody();
-    }
     
     /**
      * @param string $number
@@ -141,26 +133,11 @@ class MtalkzTransport extends AbstractSmsApi
     protected function sanitizeNumber($number)
     {
         $util = PhoneNumberUtil::getInstance();
-        $parsed = $util->parse($number, 'IN');
+        $parsed = $util->parse($number, 'AU');
 
         return $util->format($parsed, PhoneNumberFormat::E164);
     }
 
-    /**
-     * @return bool
-     */
-    protected function configureConnection()
-    {
-        $integration = $this->integrationHelper->getIntegrationObject('Mtalkz');
-        if ($integration && $integration->getIntegrationSettings()->getIsPublished()) {
-            $keys = $integration->getDecryptedApiKeys();
-            if (empty($keys['api_key']) || empty($keys['sender_id'])) {
-                return false;
-            }
-            $this->api_key = $keys['api_key'];
-            $this->sender_id = $keys['sender_id'];
-            $this->connected = true;
-        }
-        return $this->connected;
-    }
+
+
 }
