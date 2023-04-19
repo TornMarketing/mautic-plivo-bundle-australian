@@ -49,9 +49,11 @@ class PlivoIntegration extends AbstractIntegration
     public function getRequiredKeyFields()
     {
         return [
-            'AUTH_ID'  => 'mautic.plugin.plivo.auth_id',
-            'AUTH_TOKEN' => 'mautic.plugin.plivo.auth_token',
-            'sender_phone_number' => 'mautic.plugin.plivo.sender.phone_number',
+            'auth_id'  => 'mautic.plugin.plivo.auth_id',
+            'auth_token' => 'mautic.plugin.plivo.auth_token',
+            'sender_phone_number' => 'mautic.plugin.plivo.sender.sender_phone_number',
+            'alternative_sender_number_contact_field' => 'mautic.plugin.plivo.sender.alternative_sender_number_contact_field',
+            'default_country_code' => 'mautic.plugin.plivo.sender.default_country_code'
         ];
     }
 
